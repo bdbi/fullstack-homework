@@ -36,6 +36,7 @@ type Config struct {
 }
 
 type ResolverRoot interface {
+	Mutation() MutationResolver
 	Query() QueryResolver
 }
 
@@ -43,11 +44,21 @@ type DirectiveRoot struct {
 }
 
 type ComplexityRoot struct {
+	ChoiceAnswer struct {
+		ID             func(childComplexity int) int
+		QuestionID     func(childComplexity int) int
+		SelectedOption func(childComplexity int) int
+	}
+
 	ChoiceQuestion struct {
 		Body    func(childComplexity int) int
 		ID      func(childComplexity int) int
 		Options func(childComplexity int) int
 		Weight  func(childComplexity int) int
+	}
+
+	Mutation struct {
+		SubmitAnswer func(childComplexity int, answer *model.AnswerInput) int
 	}
 
 	Option struct {
@@ -60,6 +71,12 @@ type ComplexityRoot struct {
 		Questions func(childComplexity int) int
 	}
 
+	TextAnswer struct {
+		ID         func(childComplexity int) int
+		QuestionID func(childComplexity int) int
+		Text       func(childComplexity int) int
+	}
+
 	TextQuestion struct {
 		Body   func(childComplexity int) int
 		ID     func(childComplexity int) int
@@ -67,6 +84,9 @@ type ComplexityRoot struct {
 	}
 }
 
+type MutationResolver interface {
+	SubmitAnswer(ctx context.Context, answer *model.AnswerInput) (model.Answer, error)
+}
 type QueryResolver interface {
 	Questions(ctx context.Context) ([]model.Question, error)
 }
@@ -85,6 +105,27 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 	ec := executionContext{nil, e}
 	_ = ec
 	switch typeName + "." + field {
+
+	case "ChoiceAnswer.id":
+		if e.complexity.ChoiceAnswer.ID == nil {
+			break
+		}
+
+		return e.complexity.ChoiceAnswer.ID(childComplexity), true
+
+	case "ChoiceAnswer.questionID":
+		if e.complexity.ChoiceAnswer.QuestionID == nil {
+			break
+		}
+
+		return e.complexity.ChoiceAnswer.QuestionID(childComplexity), true
+
+	case "ChoiceAnswer.selectedOption":
+		if e.complexity.ChoiceAnswer.SelectedOption == nil {
+			break
+		}
+
+		return e.complexity.ChoiceAnswer.SelectedOption(childComplexity), true
 
 	case "ChoiceQuestion.body":
 		if e.complexity.ChoiceQuestion.Body == nil {
@@ -114,6 +155,18 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.ChoiceQuestion.Weight(childComplexity), true
 
+	case "Mutation.submitAnswer":
+		if e.complexity.Mutation.SubmitAnswer == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_submitAnswer_args(context.TODO(), rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.SubmitAnswer(childComplexity, args["answer"].(*model.AnswerInput)), true
+
 	case "Option.body":
 		if e.complexity.Option.Body == nil {
 			break
@@ -141,6 +194,27 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 		}
 
 		return e.complexity.Query.Questions(childComplexity), true
+
+	case "TextAnswer.id":
+		if e.complexity.TextAnswer.ID == nil {
+			break
+		}
+
+		return e.complexity.TextAnswer.ID(childComplexity), true
+
+	case "TextAnswer.questionID":
+		if e.complexity.TextAnswer.QuestionID == nil {
+			break
+		}
+
+		return e.complexity.TextAnswer.QuestionID(childComplexity), true
+
+	case "TextAnswer.text":
+		if e.complexity.TextAnswer.Text == nil {
+			break
+		}
+
+		return e.complexity.TextAnswer.Text(childComplexity), true
 
 	case "TextQuestion.body":
 		if e.complexity.TextQuestion.Body == nil {
@@ -180,6 +254,20 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 			}
 			first = false
 			data := ec._Query(ctx, rc.Operation.SelectionSet)
+			var buf bytes.Buffer
+			data.MarshalGQL(&buf)
+
+			return &graphql.Response{
+				Data: buf.Bytes(),
+			}
+		}
+	case ast.Mutation:
+		return func(ctx context.Context) *graphql.Response {
+			if !first {
+				return nil
+			}
+			first = false
+			data := ec._Mutation(ctx, rc.Operation.SelectionSet)
 			var buf bytes.Buffer
 			data.MarshalGQL(&buf)
 
@@ -241,6 +329,32 @@ type Option {
   weight: Float!
 }
 
+interface Answer {
+  id: ID!
+  questionID: ID!
+}
+
+type TextAnswer implements Answer {
+  id: ID!
+  questionID: ID!
+  text: String!
+}
+
+type ChoiceAnswer implements Answer {
+  id: ID!
+  questionID: ID!
+  selectedOption: ID!
+}
+
+input AnswerInput {
+  questionID: ID!
+  text: String
+  optionID: ID
+}
+
+type Mutation {
+  submitAnswer(answer: AnswerInput) : Answer
+}
 `, BuiltIn: false},
 }
 var parsedSchema = gqlparser.MustLoadSchema(sources...)
@@ -248,6 +362,21 @@ var parsedSchema = gqlparser.MustLoadSchema(sources...)
 // endregion ************************** generated!.gotpl **************************
 
 // region    ***************************** args.gotpl *****************************
+
+func (ec *executionContext) field_Mutation_submitAnswer_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
+	var err error
+	args := map[string]interface{}{}
+	var arg0 *model.AnswerInput
+	if tmp, ok := rawArgs["answer"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("answer"))
+		arg0, err = ec.unmarshalOAnswerInput2ᚖhomeworkᚑbackendᚋgraphᚋmodelᚐAnswerInput(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["answer"] = arg0
+	return args, nil
+}
 
 func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
 	var err error
@@ -301,6 +430,111 @@ func (ec *executionContext) field___Type_fields_args(ctx context.Context, rawArg
 // endregion ************************** directives.gotpl **************************
 
 // region    **************************** field.gotpl *****************************
+
+func (ec *executionContext) _ChoiceAnswer_id(ctx context.Context, field graphql.CollectedField, obj *model.ChoiceAnswer) (ret graphql.Marshaler) {
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	fc := &graphql.FieldContext{
+		Object:     "ChoiceAnswer",
+		Field:      field,
+		Args:       nil,
+		IsMethod:   false,
+		IsResolver: false,
+	}
+
+	ctx = graphql.WithFieldContext(ctx, fc)
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.ID, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNID2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) _ChoiceAnswer_questionID(ctx context.Context, field graphql.CollectedField, obj *model.ChoiceAnswer) (ret graphql.Marshaler) {
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	fc := &graphql.FieldContext{
+		Object:     "ChoiceAnswer",
+		Field:      field,
+		Args:       nil,
+		IsMethod:   false,
+		IsResolver: false,
+	}
+
+	ctx = graphql.WithFieldContext(ctx, fc)
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.QuestionID, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNID2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) _ChoiceAnswer_selectedOption(ctx context.Context, field graphql.CollectedField, obj *model.ChoiceAnswer) (ret graphql.Marshaler) {
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	fc := &graphql.FieldContext{
+		Object:     "ChoiceAnswer",
+		Field:      field,
+		Args:       nil,
+		IsMethod:   false,
+		IsResolver: false,
+	}
+
+	ctx = graphql.WithFieldContext(ctx, fc)
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.SelectedOption, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNID2string(ctx, field.Selections, res)
+}
 
 func (ec *executionContext) _ChoiceQuestion_id(ctx context.Context, field graphql.CollectedField, obj *model.ChoiceQuestion) (ret graphql.Marshaler) {
 	defer func() {
@@ -437,6 +671,45 @@ func (ec *executionContext) _ChoiceQuestion_options(ctx context.Context, field g
 	res := resTmp.([]*model.Option)
 	fc.Result = res
 	return ec.marshalOOption2ᚕᚖhomeworkᚑbackendᚋgraphᚋmodelᚐOptionᚄ(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) _Mutation_submitAnswer(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	fc := &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		Args:       nil,
+		IsMethod:   true,
+		IsResolver: true,
+	}
+
+	ctx = graphql.WithFieldContext(ctx, fc)
+	rawArgs := field.ArgumentMap(ec.Variables)
+	args, err := ec.field_Mutation_submitAnswer_args(ctx, rawArgs)
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	fc.Args = args
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Mutation().SubmitAnswer(rctx, args["answer"].(*model.AnswerInput))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(model.Answer)
+	fc.Result = res
+	return ec.marshalOAnswer2homeworkᚑbackendᚋgraphᚋmodelᚐAnswer(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _Option_id(ctx context.Context, field graphql.CollectedField, obj *model.Option) (ret graphql.Marshaler) {
@@ -648,6 +921,111 @@ func (ec *executionContext) _Query___schema(ctx context.Context, field graphql.C
 	res := resTmp.(*introspection.Schema)
 	fc.Result = res
 	return ec.marshalO__Schema2ᚖgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐSchema(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) _TextAnswer_id(ctx context.Context, field graphql.CollectedField, obj *model.TextAnswer) (ret graphql.Marshaler) {
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	fc := &graphql.FieldContext{
+		Object:     "TextAnswer",
+		Field:      field,
+		Args:       nil,
+		IsMethod:   false,
+		IsResolver: false,
+	}
+
+	ctx = graphql.WithFieldContext(ctx, fc)
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.ID, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNID2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) _TextAnswer_questionID(ctx context.Context, field graphql.CollectedField, obj *model.TextAnswer) (ret graphql.Marshaler) {
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	fc := &graphql.FieldContext{
+		Object:     "TextAnswer",
+		Field:      field,
+		Args:       nil,
+		IsMethod:   false,
+		IsResolver: false,
+	}
+
+	ctx = graphql.WithFieldContext(ctx, fc)
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.QuestionID, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNID2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) _TextAnswer_text(ctx context.Context, field graphql.CollectedField, obj *model.TextAnswer) (ret graphql.Marshaler) {
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	fc := &graphql.FieldContext{
+		Object:     "TextAnswer",
+		Field:      field,
+		Args:       nil,
+		IsMethod:   false,
+		IsResolver: false,
+	}
+
+	ctx = graphql.WithFieldContext(ctx, fc)
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Text, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _TextQuestion_id(ctx context.Context, field graphql.CollectedField, obj *model.TextQuestion) (ret graphql.Marshaler) {
@@ -1877,9 +2255,71 @@ func (ec *executionContext) ___Type_ofType(ctx context.Context, field graphql.Co
 
 // region    **************************** input.gotpl *****************************
 
+func (ec *executionContext) unmarshalInputAnswerInput(ctx context.Context, obj interface{}) (model.AnswerInput, error) {
+	var it model.AnswerInput
+	asMap := map[string]interface{}{}
+	for k, v := range obj.(map[string]interface{}) {
+		asMap[k] = v
+	}
+
+	for k, v := range asMap {
+		switch k {
+		case "questionID":
+			var err error
+
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("questionID"))
+			it.QuestionID, err = ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+		case "text":
+			var err error
+
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("text"))
+			it.Text, err = ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+		case "optionID":
+			var err error
+
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("optionID"))
+			it.OptionID, err = ec.unmarshalOID2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+		}
+	}
+
+	return it, nil
+}
+
 // endregion **************************** input.gotpl *****************************
 
 // region    ************************** interface.gotpl ***************************
+
+func (ec *executionContext) _Answer(ctx context.Context, sel ast.SelectionSet, obj model.Answer) graphql.Marshaler {
+	switch obj := (obj).(type) {
+	case nil:
+		return graphql.Null
+	case model.TextAnswer:
+		return ec._TextAnswer(ctx, sel, &obj)
+	case *model.TextAnswer:
+		if obj == nil {
+			return graphql.Null
+		}
+		return ec._TextAnswer(ctx, sel, obj)
+	case model.ChoiceAnswer:
+		return ec._ChoiceAnswer(ctx, sel, &obj)
+	case *model.ChoiceAnswer:
+		if obj == nil {
+			return graphql.Null
+		}
+		return ec._ChoiceAnswer(ctx, sel, obj)
+	default:
+		panic(fmt.Errorf("unexpected type %T", obj))
+	}
+}
 
 func (ec *executionContext) _Question(ctx context.Context, sel ast.SelectionSet, obj model.Question) graphql.Marshaler {
 	switch obj := (obj).(type) {
@@ -1907,6 +2347,43 @@ func (ec *executionContext) _Question(ctx context.Context, sel ast.SelectionSet,
 // endregion ************************** interface.gotpl ***************************
 
 // region    **************************** object.gotpl ****************************
+
+var choiceAnswerImplementors = []string{"ChoiceAnswer", "Answer"}
+
+func (ec *executionContext) _ChoiceAnswer(ctx context.Context, sel ast.SelectionSet, obj *model.ChoiceAnswer) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, choiceAnswerImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	var invalids uint32
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ChoiceAnswer")
+		case "id":
+			out.Values[i] = ec._ChoiceAnswer_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
+		case "questionID":
+			out.Values[i] = ec._ChoiceAnswer_questionID(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
+		case "selectedOption":
+			out.Values[i] = ec._ChoiceAnswer_selectedOption(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch()
+	if invalids > 0 {
+		return graphql.Null
+	}
+	return out
+}
 
 var choiceQuestionImplementors = []string{"ChoiceQuestion", "Question"}
 
@@ -1936,6 +2413,34 @@ func (ec *executionContext) _ChoiceQuestion(ctx context.Context, sel ast.Selecti
 			}
 		case "options":
 			out.Values[i] = ec._ChoiceQuestion_options(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch()
+	if invalids > 0 {
+		return graphql.Null
+	}
+	return out
+}
+
+var mutationImplementors = []string{"Mutation"}
+
+func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, mutationImplementors)
+
+	ctx = graphql.WithFieldContext(ctx, &graphql.FieldContext{
+		Object: "Mutation",
+	})
+
+	out := graphql.NewFieldSet(fields)
+	var invalids uint32
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Mutation")
+		case "submitAnswer":
+			out.Values[i] = ec._Mutation_submitAnswer(ctx, field)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -2017,6 +2522,43 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			out.Values[i] = ec._Query___type(ctx, field)
 		case "__schema":
 			out.Values[i] = ec._Query___schema(ctx, field)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch()
+	if invalids > 0 {
+		return graphql.Null
+	}
+	return out
+}
+
+var textAnswerImplementors = []string{"TextAnswer", "Answer"}
+
+func (ec *executionContext) _TextAnswer(ctx context.Context, sel ast.SelectionSet, obj *model.TextAnswer) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, textAnswerImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	var invalids uint32
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TextAnswer")
+		case "id":
+			out.Values[i] = ec._TextAnswer_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
+		case "questionID":
+			out.Values[i] = ec._TextAnswer_questionID(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
+		case "text":
+			out.Values[i] = ec._TextAnswer_text(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -2696,6 +3238,21 @@ func (ec *executionContext) marshalN__TypeKind2string(ctx context.Context, sel a
 	return res
 }
 
+func (ec *executionContext) marshalOAnswer2homeworkᚑbackendᚋgraphᚋmodelᚐAnswer(ctx context.Context, sel ast.SelectionSet, v model.Answer) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._Answer(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOAnswerInput2ᚖhomeworkᚑbackendᚋgraphᚋmodelᚐAnswerInput(ctx context.Context, v interface{}) (*model.AnswerInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputAnswerInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalOBoolean2bool(ctx context.Context, v interface{}) (bool, error) {
 	res, err := graphql.UnmarshalBoolean(v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -2718,6 +3275,21 @@ func (ec *executionContext) marshalOBoolean2ᚖbool(ctx context.Context, sel ast
 		return graphql.Null
 	}
 	return graphql.MarshalBoolean(*v)
+}
+
+func (ec *executionContext) unmarshalOID2ᚖstring(ctx context.Context, v interface{}) (*string, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := graphql.UnmarshalID(v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOID2ᚖstring(ctx context.Context, sel ast.SelectionSet, v *string) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return graphql.MarshalID(*v)
 }
 
 func (ec *executionContext) marshalOOption2ᚕᚖhomeworkᚑbackendᚋgraphᚋmodelᚐOptionᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.Option) graphql.Marshaler {

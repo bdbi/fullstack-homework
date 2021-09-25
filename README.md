@@ -16,7 +16,7 @@ Your solution should meet all these requirements.
 
 - [x] Return at least one choice and one text question from the API
 
-- [ ] Implement a mutation for submitting the answers.
+- [x] Implement a mutation for submitting the answers.
 
   For each question, the selected option ID or the entered text is submitted.
 
