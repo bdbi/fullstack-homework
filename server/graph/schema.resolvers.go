@@ -21,21 +21,41 @@ func (r *mutationResolver) SubmitAnswer(ctx context.Context, answer *model.Answe
 		return nil, err
 	}
 	var question model.Question
+search:
 	for _, q := range questions {
 		switch v := q.(type) {
 		case model.ChoiceQuestion:
 			if v.ID == answer.QuestionID {
 				question = v
-				break
+				if answer.OptionID == nil {
+					return nil, fmt.Errorf("submitted answer is not a ChoiceAnswer")
+				}
+				var choiceOk bool
+			search_opt:
+				for _, opt := range v.Options {
+					if opt.ID == *answer.OptionID {
+						choiceOk = true
+						break search_opt
+					}
+				}
+				if !choiceOk {
+					return nil, fmt.Errorf("option id %s is not a valid question option", *answer.OptionID)
+				}
+				break search
 			}
 		case model.TextQuestion:
 			if v.ID == answer.QuestionID {
 				question = v
-				break
+				if answer.Text == nil {
+					return nil, fmt.Errorf("submitted answer is not a TextAnswer")
+				}
+				break search
 			}
 		}
 	}
-	//todo check if question == nil (question not found)
+	if question == nil {
+		return nil, fmt.Errorf("question %s not found", answer.QuestionID)
+	}
 	var newAnswer model.Answer
 	switch v := question.(type) {
 	case model.ChoiceQuestion:
