@@ -7,19 +7,25 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"homework-backend/ent"
+	"homework-backend/ent/question"
 	"homework-backend/graph/generated"
 	"homework-backend/graph/model"
 	"log"
 	"os"
 	"reflect"
-	"strconv"
+
+	"github.com/google/uuid"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 func (r *mutationResolver) SubmitAnswer(ctx context.Context, answer *model.AnswerInput) (model.Answer, error) {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
-	// mutex ensures integrity of ids
-	answerID := r.lastAnswerID + 1
+	client, err := ent.Open("sqlite3", os.Getenv("SQLITE_CONN"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer client.Close()
+
 	question, err := r.Query().QuestionByID(ctx, answer.QuestionID)
 	if err != nil {
 		return nil, err
@@ -27,7 +33,7 @@ func (r *mutationResolver) SubmitAnswer(ctx context.Context, answer *model.Answe
 	if question == nil {
 		return nil, fmt.Errorf("question %s not found", answer.QuestionID)
 	}
-	var newAnswer model.Answer
+	var answerCreate *ent.AnswerCreate
 	switch v := question.(type) {
 	case model.ChoiceQuestion:
 		// validation
@@ -44,78 +50,126 @@ func (r *mutationResolver) SubmitAnswer(ctx context.Context, answer *model.Answe
 		if !validateOptions {
 			return nil, fmt.Errorf("option id %s is not a valid question option", *answer.OptionID)
 		}
-		// validation
-		newAnswer = &model.ChoiceAnswer{
-			ID:             strconv.Itoa(answerID),
-			QuestionID:     answer.QuestionID,
-			SelectedOption: *answer.OptionID,
-		}
+		// end-validation
+		answerCreate = client.Answer.Create().SetQuestionID(answer.QuestionID).SetOptionID(*answer.OptionID)
 	case model.TextQuestion:
 		// validation
 		if answer.Text == nil {
 			return nil, fmt.Errorf("submitted answer is not a TextAnswer")
 		}
-		// validation
-		newAnswer = &model.TextAnswer{
-			ID:         strconv.Itoa(answerID),
-			QuestionID: answer.QuestionID,
-			Text:       *answer.Text,
-		}
+		// end-validation
+		answerCreate = client.Answer.Create().SetQuestionID(answer.QuestionID).SetBody(*answer.Text)
 	default:
 		return nil, fmt.Errorf("%s type answer not implemented", reflect.TypeOf(v))
 	}
-	r.answers = append(r.answers, newAnswer)
-	dat, err := json.Marshal(newAnswer)
+
+	a, err := answerCreate.Save(ctx)
+	if err != nil {
+		return nil, err
+	}
+	dat, err := json.Marshal(a)
 	if err != nil {
 		log.Println(err.Error())
 	} else {
 		fmt.Fprintln(os.Stdout, string(dat))
 	}
 
-	r.lastAnswerID++ // incremented at the end to avoid unnecessary increments in case of validation errors
+	var newAnswer model.Answer
+	switch question.(type) {
+	case model.ChoiceQuestion:
+		newAnswer = model.ChoiceAnswer{
+			ID:             a.ID.String(),
+			QuestionID:     a.QuestionID,
+			SelectedOption: *a.OptionID,
+		}
+	case model.TextQuestion:
+		newAnswer = model.TextAnswer{
+			ID:         a.ID.String(),
+			QuestionID: a.QuestionID,
+			Text:       *a.Body,
+		}
+	}
 	return newAnswer, nil
 }
 
 func (r *queryResolver) Questions(ctx context.Context) ([]model.Question, error) {
-	return []model.Question{
-		model.ChoiceQuestion{
-			ID:     "100",
-			Body:   "Where does the sun set?",
-			Weight: 0.5,
-			Options: []*model.Option{
-				{ID: "200", Body: "East", Weight: 0},
-				{ID: "201", Body: "West", Weight: 1},
-			},
-		},
-		model.TextQuestion{
-			ID:     "101",
-			Body:   "What is your favourite food?",
-			Weight: 1,
-		},
-	}, nil
+	client, err := ent.Open("sqlite3", os.Getenv("SQLITE_CONN"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer client.Close()
+	questions, err := client.Question.Query().WithOptions().All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var gqlQuestions []model.Question = make([]model.Question, 0)
+	for _, question := range questions {
+		switch question.Type {
+		case "ChoiceQuestion":
+			var gqpOpts []*model.Option = make([]*model.Option, 0)
+			for _, opt := range question.Edges.Options {
+				gqpOpts = append(gqpOpts, &model.Option{
+					ID:     opt.ID.String(),
+					Weight: opt.Weight,
+					Body:   opt.Body,
+				})
+			}
+			gqlQuestions = append(gqlQuestions, model.ChoiceQuestion{
+				ID:      question.ID.String(),
+				Body:    *question.Body,
+				Weight:  question.Weight,
+				Options: gqpOpts,
+			})
+		case "TextQuestion":
+			gqlQuestions = append(gqlQuestions, model.TextQuestion{
+				ID:     question.ID.String(),
+				Weight: question.Weight,
+				Body:   *question.Body,
+			})
+		}
+	}
+	return gqlQuestions, nil
 }
 
 func (r *queryResolver) QuestionByID(ctx context.Context, id string) (model.Question, error) {
-	questions, err := r.Query().Questions(ctx)
+	client, err := ent.Open("sqlite3", os.Getenv("SQLITE_CONN"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer client.Close()
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return nil, err
+	}
+	q, err := client.Question.Query().WithOptions().Where(question.ID(uid)).Only(ctx)
 	if err != nil {
 		return nil, err
 	}
 	var question model.Question
-search:
-	for _, q := range questions {
-		switch v := q.(type) {
-		case model.ChoiceQuestion:
-			if v.ID == id {
-				question = q
-				break search
-			}
-		case model.TextQuestion:
-			if v.ID == id {
-				question = q
-				break search
-			}
+	switch q.Type {
+	case "ChoiceQuestion":
+		var gqpOpts []*model.Option = make([]*model.Option, 0)
+		for _, opt := range q.Edges.Options {
+			gqpOpts = append(gqpOpts, &model.Option{
+				ID:     opt.ID.String(),
+				Weight: opt.Weight,
+				Body:   opt.Body,
+			})
+		}
+		question = model.ChoiceQuestion{
+			ID:      q.ID.String(),
+			Weight:  q.Weight,
+			Body:    *q.Body,
+			Options: gqpOpts,
+		}
+	case "TextQuestion":
+		question = model.TextQuestion{
+			ID:     q.ID.String(),
+			Weight: q.Weight,
+			Body:   *q.Body,
 		}
 	}
+
 	return question, nil
 }
 
