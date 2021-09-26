@@ -1,5 +1,5 @@
-import { React, useState, useEffect } from 'react'
-import { gql, useQuery, useMutation } from "urql";
+import { React, useState } from 'react'
+import { gql, useQuery } from "urql";
 import Question from './Question'
 
 
@@ -7,6 +7,7 @@ export function Questions() {
   const [{ data, fetching, error }] = useQuery({ query });
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [answers, setAnswers] = useState({})
+  // storing anwsers to display the previous value when using next and previous buttons
 
   if (fetching) return "Loading...";
   if (error) return `Error: ${error}`;
@@ -29,7 +30,8 @@ export function Questions() {
     }
   }
 
-  const handleAnswer = (questionID) => {
+  // I prefer to use a closure to ensure the questionID is not changed downstream
+  const handleAnswerUpdate = (questionID) => {
     const storeAnswer = (answer) => {
       setAnswers(answers => {
         answers[questionID] = answer
@@ -43,7 +45,7 @@ export function Questions() {
     <>
       {
         <Question peviousAnswer={answers[data.questions[currentQuestionIndex].id]} 
-          answerListener={handleAnswer(data.questions[currentQuestionIndex].id)} 
+          answerListener={handleAnswerUpdate(data.questions[currentQuestionIndex].id)} 
           question={data.questions[currentQuestionIndex]} />
       }
       {
@@ -51,9 +53,8 @@ export function Questions() {
         <button type="button" onClick={showPreviousQuestion}>Previous</button>
       }
       {
-        currentQuestionIndex < data.questions.length - 1 ?
-          <button type="button" onClick={showNextQuestion}>Next</button> :
-          <button type="button" onClick={()=>{console.log(answers)}}>Submit Answers</button>
+        currentQuestionIndex < data.questions.length - 1 && 
+          <button type="button" onClick={showNextQuestion}>Next</button>
       }
     </>
   );
