@@ -32,7 +32,7 @@ func (r *mutationResolver) SubmitAnswer(ctx context.Context, answer *model.Answe
 	case model.ChoiceQuestion:
 		// validation
 		if answer.OptionID == nil {
-			return nil, fmt.Errorf("")
+			return nil, fmt.Errorf("submitted answer is not a ChoiceAnswer")
 		}
 		var validateOptions bool
 		for _, opt := range v.Options {
@@ -42,7 +42,7 @@ func (r *mutationResolver) SubmitAnswer(ctx context.Context, answer *model.Answe
 			}
 		}
 		if !validateOptions {
-			return nil, fmt.Errorf("")
+			return nil, fmt.Errorf("option id %s is not a valid question option", *answer.OptionID)
 		}
 		// validation
 		newAnswer = &model.ChoiceAnswer{
@@ -53,7 +53,7 @@ func (r *mutationResolver) SubmitAnswer(ctx context.Context, answer *model.Answe
 	case model.TextQuestion:
 		// validation
 		if answer.Text == nil {
-			return nil, fmt.Errorf("")
+			return nil, fmt.Errorf("submitted answer is not a TextAnswer")
 		}
 		// validation
 		newAnswer = &model.TextAnswer{
