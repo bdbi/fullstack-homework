@@ -5,9 +5,12 @@ package graph
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"homework-backend/graph/generated"
 	"homework-backend/graph/model"
+	"log"
+	"os"
 	"reflect"
 	"strconv"
 )
@@ -74,6 +77,12 @@ search:
 		return nil, fmt.Errorf("%s type answer not implemented", reflect.TypeOf(v))
 	}
 	r.answers = append(r.answers, newAnswer)
+	dat, err := json.Marshal(newAnswer)
+	if err != nil {
+		log.Println(err.Error())
+	} else {
+		fmt.Fprintln(os.Stdout, string(dat))
+	}
 	return newAnswer, nil
 }
 

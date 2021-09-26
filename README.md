@@ -22,7 +22,7 @@ Your solution should meet all these requirements.
 
 - [x] Validate the submitted answers (question and option IDs are correct, question types match, ...)
 
-- [ ] Print the answers to stdout in a machine-readable format (JSON, CSV, ...)
+- [x] Print the answers to stdout in a machine-readable format (JSON, CSV, ...)
 
   For simplicity we can assume that stdout is written to a log file, which is then later processed.
 
