@@ -30,9 +30,9 @@ Your solution should meet all these requirements.
 
 - [x] Show the questions and options to the user in some way.
 
-- [ ] Show the questions and options sorted by their `weight`.
+- [x] Show the questions and options sorted by their `weight`.
 
-- [ ] Implement UI to answer choice and text questions.
+- [x] Implement UI to answer choice and text questions.
 
     This can be similar to [how Toggl Hire does it](https://apply.hire.toggl.com/61VJ1QV7E1Z9ODJU2P2/practice). Note that there is no need to implement time limits or rating the questions.
 
