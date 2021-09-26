@@ -68,7 +68,8 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
-		Questions func(childComplexity int) int
+		QuestionByID func(childComplexity int, id string) int
+		Questions    func(childComplexity int) int
 	}
 
 	TextAnswer struct {
@@ -89,6 +90,7 @@ type MutationResolver interface {
 }
 type QueryResolver interface {
 	Questions(ctx context.Context) ([]model.Question, error)
+	QuestionByID(ctx context.Context, id string) (model.Question, error)
 }
 
 type executableSchema struct {
@@ -187,6 +189,18 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 		}
 
 		return e.complexity.Option.Weight(childComplexity), true
+
+	case "Query.questionByID":
+		if e.complexity.Query.QuestionByID == nil {
+			break
+		}
+
+		args, err := ec.field_Query_questionByID_args(context.TODO(), rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.QuestionByID(childComplexity, args["id"].(string)), true
 
 	case "Query.questions":
 		if e.complexity.Query.Questions == nil {
@@ -303,6 +317,7 @@ func (ec *executionContext) introspectType(name string) (*introspection.Type, er
 var sources = []*ast.Source{
 	{Name: "graph/schema.graphqls", Input: `type Query {
   questions: [Question!]!
+  questionByID(id: ID!): Question
 }
 
 interface Question {
@@ -390,6 +405,21 @@ func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs
 		}
 	}
 	args["name"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_questionByID_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
+	var err error
+	args := map[string]interface{}{}
+	var arg0 string
+	if tmp, ok := rawArgs["id"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
+		arg0, err = ec.unmarshalNID2string(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["id"] = arg0
 	return args, nil
 }
 
@@ -850,6 +880,45 @@ func (ec *executionContext) _Query_questions(ctx context.Context, field graphql.
 	res := resTmp.([]model.Question)
 	fc.Result = res
 	return ec.marshalNQuestion2ᚕhomeworkᚑbackendᚋgraphᚋmodelᚐQuestionᚄ(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) _Query_questionByID(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	fc := &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		Args:       nil,
+		IsMethod:   true,
+		IsResolver: true,
+	}
+
+	ctx = graphql.WithFieldContext(ctx, fc)
+	rawArgs := field.ArgumentMap(ec.Variables)
+	args, err := ec.field_Query_questionByID_args(ctx, rawArgs)
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	fc.Args = args
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Query().QuestionByID(rctx, args["id"].(string))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(model.Question)
+	fc.Result = res
+	return ec.marshalOQuestion2homeworkᚑbackendᚋgraphᚋmodelᚐQuestion(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _Query___type(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
@@ -2518,6 +2587,17 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 				}
 				return res
 			})
+		case "questionByID":
+			field := field
+			out.Concurrently(i, func() (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_questionByID(ctx, field)
+				return res
+			})
 		case "__type":
 			out.Values[i] = ec._Query___type(ctx, field)
 		case "__schema":
@@ -3337,6 +3417,13 @@ func (ec *executionContext) marshalOOption2ᚕᚖhomeworkᚑbackendᚋgraphᚋmo
 	}
 
 	return ret
+}
+
+func (ec *executionContext) marshalOQuestion2homeworkᚑbackendᚋgraphᚋmodelᚐQuestion(ctx context.Context, sel ast.SelectionSet, v model.Question) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._Question(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOString2string(ctx context.Context, v interface{}) (string, error) {

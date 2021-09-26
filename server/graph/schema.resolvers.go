@@ -18,43 +18,11 @@ import (
 func (r *mutationResolver) SubmitAnswer(ctx context.Context, answer *model.AnswerInput) (model.Answer, error) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
-	r.lastAnswerID++
-	questions, err := r.Query().Questions(ctx)
+	// mutex ensures integrity of ids
+	answerID := r.lastAnswerID + 1
+	question, err := r.Query().QuestionByID(ctx, answer.QuestionID)
 	if err != nil {
 		return nil, err
-	}
-	var question model.Question
-search:
-	for _, q := range questions {
-		switch v := q.(type) {
-		case model.ChoiceQuestion:
-			if v.ID == answer.QuestionID {
-				question = v
-				if answer.OptionID == nil {
-					return nil, fmt.Errorf("submitted answer is not a ChoiceAnswer")
-				}
-				var choiceOk bool
-			search_opt:
-				for _, opt := range v.Options {
-					if opt.ID == *answer.OptionID {
-						choiceOk = true
-						break search_opt
-					}
-				}
-				if !choiceOk {
-					return nil, fmt.Errorf("option id %s is not a valid question option", *answer.OptionID)
-				}
-				break search
-			}
-		case model.TextQuestion:
-			if v.ID == answer.QuestionID {
-				question = v
-				if answer.Text == nil {
-					return nil, fmt.Errorf("submitted answer is not a TextAnswer")
-				}
-				break search
-			}
-		}
 	}
 	if question == nil {
 		return nil, fmt.Errorf("question %s not found", answer.QuestionID)
@@ -62,14 +30,34 @@ search:
 	var newAnswer model.Answer
 	switch v := question.(type) {
 	case model.ChoiceQuestion:
+		// validation
+		if answer.OptionID == nil {
+			return nil, fmt.Errorf("")
+		}
+		var validateOptions bool
+		for _, opt := range v.Options {
+			if opt.ID == *answer.OptionID {
+				validateOptions = true
+				break
+			}
+		}
+		if !validateOptions {
+			return nil, fmt.Errorf("")
+		}
+		// validation
 		newAnswer = &model.ChoiceAnswer{
-			ID:             strconv.Itoa(r.lastAnswerID),
+			ID:             strconv.Itoa(answerID),
 			QuestionID:     answer.QuestionID,
 			SelectedOption: *answer.OptionID,
 		}
 	case model.TextQuestion:
+		// validation
+		if answer.Text == nil {
+			return nil, fmt.Errorf("")
+		}
+		// validation
 		newAnswer = &model.TextAnswer{
-			ID:         strconv.Itoa(r.lastAnswerID),
+			ID:         strconv.Itoa(answerID),
 			QuestionID: answer.QuestionID,
 			Text:       *answer.Text,
 		}
@@ -83,6 +71,8 @@ search:
 	} else {
 		fmt.Fprintln(os.Stdout, string(dat))
 	}
+
+	r.lastAnswerID++ // incremented at the end to avoid unnecessary increments in case of validation errors
 	return newAnswer, nil
 }
 
@@ -103,6 +93,30 @@ func (r *queryResolver) Questions(ctx context.Context) ([]model.Question, error)
 			Weight: 1,
 		},
 	}, nil
+}
+
+func (r *queryResolver) QuestionByID(ctx context.Context, id string) (model.Question, error) {
+	questions, err := r.Query().Questions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var question model.Question
+search:
+	for _, q := range questions {
+		switch v := q.(type) {
+		case model.ChoiceQuestion:
+			if v.ID == id {
+				question = q
+				break search
+			}
+		case model.TextQuestion:
+			if v.ID == id {
+				question = q
+				break search
+			}
+		}
+	}
+	return question, nil
 }
 
 // Mutation returns generated.MutationResolver implementation.
